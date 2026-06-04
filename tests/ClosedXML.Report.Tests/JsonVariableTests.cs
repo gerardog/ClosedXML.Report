@@ -283,6 +283,8 @@ namespace ClosedXML.Report.Tests
         {
             const int paddingLength = 2048;
             var targetBytes = targetSizeInMegabytes * 1024 * 1024;
+            // Keep the per-item payload large enough to reach multi-megabyte JSON sizes
+            // with only a few thousand rows, so the test stays end-to-end without exploding workbook size.
             var padding = new string('P', paddingLength);
             var builder = new StringBuilder(targetBytes + 1024);
             builder.Append('[');
