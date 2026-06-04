@@ -50,7 +50,7 @@ namespace ClosedXML.Report
                     }
                     catch (JsonException ex)
                     {
-                        throw new JsonException($"Invalid JSONL at line {lineNumber}.", ex);
+                        throw new JsonException($"Invalid JSONL at line {lineNumber}: {ex.Message}", ex);
                     }
 
                     using (doc)
