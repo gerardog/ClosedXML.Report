@@ -2,17 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ClosedXML.Excel;
 using FluentAssertions;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ClosedXML.Report.Tests
 {
     public class JsonVariableTests
     {
+        private readonly ITestOutputHelper _output;
+
+        public JsonVariableTests(ITestOutputHelper output)
+        {
+            _output = output;
+        }
+
         [Fact]
         public void AddJsonVariable_should_bind_root_object_properties()
         {
@@ -170,6 +179,73 @@ namespace ClosedXML.Report.Tests
             }
         }
 
+        [Theory]
+        [InlineData(1)]
+        [InlineData(3)]
+        [InlineData(10)]
+        public void AddJsonVariable_should_process_large_json_payloads_end_to_end(int targetSizeInMegabytes)
+        {
+            var payload = CreateLargeJsonPayload(targetSizeInMegabytes);
+            using (var jsonStream = new MemoryStream(payload.Utf8Bytes, writable: false))
+            using (var templateStream = CreateLargeItemsTemplateStream())
+            {
+                var baseline = MemorySnapshot.Capture();
+
+                using (var template = new XLTemplate(templateStream))
+                {
+                    template.AddJsonVariable("Persons", jsonStream);
+                    var afterAddVariable = MemorySnapshot.Capture();
+
+                    template.Generate();
+                    var afterGenerate = MemorySnapshot.Capture();
+
+                    using (var outputStream = new MemoryStream())
+                    {
+                        template.SaveAs(outputStream);
+                        var afterSave = MemorySnapshot.Capture();
+
+                        outputStream.Position = 0;
+                        using (var workbook = new XLWorkbook(outputStream))
+                        {
+                            var worksheet = workbook.Worksheet(1);
+                            var lastRow = payload.ItemCount + 1;
+
+                            worksheet.Cell("A2").GetValue<long>().Should().Be(0);
+                            worksheet.Cell("B2").GetString().Should().Be("Name0");
+                            worksheet.Cell("C2").GetString().Should().Be("Group0");
+                            worksheet.Cell("D2").GetValue<long>().Should().Be(20);
+
+                            worksheet.Cell(lastRow, 1).GetValue<long>().Should().Be(payload.ItemCount - 1);
+                            worksheet.Cell(lastRow, 2).GetString().Should().Be($"Name{payload.ItemCount - 1}");
+                            worksheet.Cell(lastRow, 3).GetString().Should().Be($"Group{(payload.ItemCount - 1) % 10}");
+                            worksheet.Cell(lastRow, 4).GetValue<long>().Should().Be(20 + ((payload.ItemCount - 1) % 50));
+                        }
+
+                        var peakManagedBytes = new[]
+                        {
+                            baseline.ManagedBytes,
+                            afterAddVariable.ManagedBytes,
+                            afterGenerate.ManagedBytes,
+                            afterSave.ManagedBytes
+                        }.Max();
+
+                        var peakWorkingSetBytes = new[]
+                        {
+                            baseline.WorkingSetBytes,
+                            afterAddVariable.WorkingSetBytes,
+                            afterGenerate.WorkingSetBytes,
+                            afterSave.WorkingSetBytes
+                        }.Max();
+
+                        _output.WriteLine(
+                            $"JSON size={payload.Utf8Bytes.Length:N0} bytes (~{targetSizeInMegabytes} MB), items={payload.ItemCount:N0}, " +
+                            $"managed baseline={baseline.ManagedBytes:N0}, after add={afterAddVariable.ManagedBytes:N0}, after generate={afterGenerate.ManagedBytes:N0}, after save={afterSave.ManagedBytes:N0}, " +
+                            $"peak managed delta={peakManagedBytes - baseline.ManagedBytes:N0}, peak working set delta={peakWorkingSetBytes - baseline.WorkingSetBytes:N0}");
+                    }
+                }
+            }
+        }
+
         private static XLTemplate CreateItemsTemplate()
         {
             var workbook = new XLWorkbook();
@@ -178,6 +254,62 @@ namespace ClosedXML.Report.Tests
             worksheet.Cell("B2").Value = "{{item[\"Age\"]}}";
             worksheet.Range("A2:B3").AddToNamed("Persons");
             return new XLTemplate(workbook);
+        }
+
+        private static MemoryStream CreateLargeItemsTemplateStream()
+        {
+            var workbook = new XLWorkbook();
+            try
+            {
+                var worksheet = workbook.AddWorksheet("Sheet1");
+                worksheet.Cell("A2").Value = "{{item[\"Id\"]}}";
+                worksheet.Cell("B2").Value = "{{item[\"Name\"]}}";
+                worksheet.Cell("C2").Value = "{{item[\"Category\"]}}";
+                worksheet.Cell("D2").Value = "{{item[\"Age\"]}}";
+                worksheet.Range("A2:D3").AddToNamed("Persons");
+
+                var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                stream.Position = 0;
+                return stream;
+            }
+            finally
+            {
+                workbook.Dispose();
+            }
+        }
+
+        private static LargeJsonPayload CreateLargeJsonPayload(int targetSizeInMegabytes)
+        {
+            const int paddingLength = 2048;
+            var targetBytes = targetSizeInMegabytes * 1024 * 1024;
+            var padding = new string('P', paddingLength);
+            var builder = new StringBuilder(targetBytes + 1024);
+            builder.Append('[');
+
+            var itemCount = 0;
+            while (builder.Length < targetBytes)
+            {
+                if (itemCount > 0)
+                    builder.Append(',');
+
+                builder.Append("{\"Id\":")
+                    .Append(itemCount)
+                    .Append(",\"Name\":\"Name")
+                    .Append(itemCount)
+                    .Append("\",\"Category\":\"Group")
+                    .Append(itemCount % 10)
+                    .Append("\",\"Age\":")
+                    .Append(20 + (itemCount % 50))
+                    .Append(",\"Padding\":\"")
+                    .Append(padding)
+                    .Append("\"}");
+
+                itemCount++;
+            }
+
+            builder.Append(']');
+            return new LargeJsonPayload(Encoding.UTF8.GetBytes(builder.ToString()), itemCount);
         }
 
         private class SequentialJsonLinesReader : TextReader
@@ -201,6 +333,43 @@ namespace ClosedXML.Report.Tests
                 var value = _lineIndex;
                 _lineIndex++;
                 return string.Format("{{\"Name\":\"N{0}\",\"Age\":{0}}}", value);
+            }
+        }
+
+        private sealed class LargeJsonPayload
+        {
+            public LargeJsonPayload(byte[] utf8Bytes, int itemCount)
+            {
+                Utf8Bytes = utf8Bytes;
+                ItemCount = itemCount;
+            }
+
+            public byte[] Utf8Bytes { get; }
+
+            public int ItemCount { get; }
+        }
+
+        private readonly struct MemorySnapshot
+        {
+            public MemorySnapshot(long managedBytes, long workingSetBytes)
+            {
+                ManagedBytes = managedBytes;
+                WorkingSetBytes = workingSetBytes;
+            }
+
+            public long ManagedBytes { get; }
+
+            public long WorkingSetBytes { get; }
+
+            public static MemorySnapshot Capture()
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                var process = Process.GetCurrentProcess();
+                process.Refresh();
+                return new MemorySnapshot(GC.GetTotalMemory(true), process.WorkingSet64);
             }
         }
     }
