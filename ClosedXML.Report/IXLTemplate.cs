@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using ClosedXML.Excel;
 
 namespace ClosedXML.Report
@@ -13,6 +15,22 @@ namespace ClosedXML.Report
         public void AddVariable(object value);
 
         public void AddVariable(string alias, object value);
+
+        public void AddVariable(JsonElement value);
+
+        public void AddVariable(string alias, JsonElement value);
+
+        public void AddVariable(JsonNode value);
+
+        public void AddVariable(string alias, JsonNode value);
+
+        public void AddJsonVariable(string alias, Stream jsonStream, JsonVariableOptions options = null);
+
+        public void AddJsonVariable(string alias, TextReader jsonReader, JsonVariableOptions options = null);
+
+        public void AddJsonLinesVariable(string alias, Stream jsonLinesStream, JsonLinesVariableOptions options = null);
+
+        public void AddJsonLinesVariable(string alias, TextReader jsonLinesReader, JsonLinesVariableOptions options = null);
 
         public void SaveAs(string file);
 
