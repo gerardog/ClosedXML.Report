@@ -50,7 +50,13 @@ namespace ClosedXML.Report
         {
             if (value != null && !value.GetType().IsGenericType && value is IEnumerable enumerable)
             {
-                var itemType = enumerable.GetItemType();
+                var itemType = value.GetType().GetItemType();
+                if (itemType == typeof(object))
+                {
+                    _variables[name] = enumerable;
+                    return;
+                }
+
                 var newEnumerable = EnumerableCastTo(enumerable, itemType);
                 _variables[name] = newEnumerable;
             }

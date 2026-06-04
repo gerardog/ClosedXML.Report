@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Dynamic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -20,8 +19,8 @@ namespace ClosedXML.Report.Tests
             using (var workbook = new XLWorkbook())
             {
                 var worksheet = workbook.AddWorksheet("Sheet1");
-                worksheet.Cell("A1").Value = "{{person.Name}}";
-                worksheet.Cell("B1").Value = "{{person.Age}}";
+                worksheet.Cell("A1").Value = "{{person[\"Name\"]}}";
+                worksheet.Cell("B1").Value = "{{person[\"Age\"]}}";
 
                 var json = "{\"Name\":\"Alice\",\"Age\":30}";
                 using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
@@ -114,9 +113,7 @@ namespace ClosedXML.Report.Tests
         public void AddJsonLinesVariable_should_include_line_number_for_malformed_line()
         {
             var reader = new StringReader("{\"Name\":\"A\"}\n{bad json}\n{\"Name\":\"B\"}");
-            var values = JsonVariableParser.ParseJsonLines(reader, new JsonLinesVariableOptions()).ToList;
-
-            Action act = () => values();
+            Action act = () => JsonVariableParser.ParseJsonLines(reader, new JsonLinesVariableOptions()).ToList();
 
             act.Should()
                 .Throw<JsonException>()
@@ -142,7 +139,7 @@ namespace ClosedXML.Report.Tests
             {
                 var worksheet = workbook.AddWorksheet("Sheet1");
                 worksheet.Cell("A1").Value = "{{Name}}";
-                worksheet.Cell("B1").Value = "{{Node.Name}}";
+                worksheet.Cell("B1").Value = "{{Node[\"Name\"]}}";
 
                 using (var template = new XLTemplate(workbook))
                 using (var doc = JsonDocument.Parse("{\"Name\":\"Element\"}"))
@@ -162,7 +159,7 @@ namespace ClosedXML.Report.Tests
         {
             using (var workbook = new XLWorkbook())
             {
-                workbook.AddWorksheet("Sheet1").Cell("A1").Value = "{{person.Name}}";
+                workbook.AddWorksheet("Sheet1").Cell("A1").Value = "{{person[\"Name\"]}}";
                 var json = "{\"Name\":\"Alice\"}";
                 using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
                 using (var template = new XLTemplate(workbook))
@@ -177,8 +174,8 @@ namespace ClosedXML.Report.Tests
         {
             var workbook = new XLWorkbook();
             var worksheet = workbook.AddWorksheet("Sheet1");
-            worksheet.Cell("A2").Value = "{{item.Name}}";
-            worksheet.Cell("B2").Value = "{{item.Age}}";
+            worksheet.Cell("A2").Value = "{{item[\"Name\"]}}";
+            worksheet.Cell("B2").Value = "{{item[\"Age\"]}}";
             worksheet.Range("A2:B3").AddToNamed("Persons");
             return new XLTemplate(workbook);
         }

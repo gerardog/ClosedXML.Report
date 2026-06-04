@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Dynamic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -81,12 +80,12 @@ namespace ClosedXML.Report
             switch (value.ValueKind)
             {
                 case JsonValueKind.Object:
-                    IDictionary<string, object> expando = new ExpandoObject();
+                    IDictionary<string, object> dictionary = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
                     foreach (var property in value.EnumerateObject())
                     {
-                        expando[property.Name] = ConvertElement(property.Value);
+                        dictionary[property.Name] = ConvertElement(property.Value);
                     }
-                    return (ExpandoObject)expando;
+                    return dictionary;
 
                 case JsonValueKind.Array:
                     return value.EnumerateArray().Select(item => ConvertElement(item.Clone()));
