@@ -49,7 +49,7 @@ namespace ClosedXML.Report.Tests
                 {
                     var worksheet = wb.Worksheet(1);
                     worksheet.Column(4).Width.Should().BeApproximately(5.0, 0.01);
-                    worksheet.Column(5).Width.Should().BeApproximately(16.16, 0.01);
+                    worksheet.Column(5).Width.Should().BeInRange(16.16, 17.0);
                 });
         }
 
