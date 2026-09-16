@@ -164,6 +164,49 @@ namespace ClosedXML.Report.Tests
         }
 
         [Fact]
+        public void AddJsonVariable_should_honor_serializer_options_and_reject_trailing_content()
+        {
+            using (var template = new XLTemplate(new XLWorkbook()))
+            {
+                var options = new JsonVariableOptions
+                {
+                    SerializerOptions = new JsonSerializerOptions
+                    {
+                        AllowTrailingCommas = true,
+                        ReadCommentHandling = JsonCommentHandling.Skip
+                    }
+                };
+
+                using (var reader = new StringReader("{/* comment */\"Name\":\"Alice\",}"))
+                {
+                    template.AddJsonVariable("person", reader, options);
+                }
+
+                Action act = () => template.AddJsonVariable("other", new StringReader("{}{}"));
+                act.Should().Throw<JsonException>();
+            }
+        }
+
+        [Fact]
+        public void AddJsonLinesVariable_should_honor_root_path_and_dispose_reader()
+        {
+            var reader = new TrackingStringReader("{\"data\":{\"Name\":\"Alice\"}}");
+            using (var template = CreateItemsTemplate())
+            {
+                template.AddJsonLinesVariable("Persons", reader, new JsonLinesVariableOptions
+                {
+                    RootPath = "data",
+                    LeaveOpen = false
+                });
+                template.Generate();
+
+                template.Workbook.Worksheet(1).Cell("A2").GetString().Should().Be("Alice");
+            }
+
+            reader.Disposed.Should().BeTrue();
+        }
+
+        [Fact]
         public void AddJsonVariable_should_keep_stream_open_by_default()
         {
             using (var workbook = new XLWorkbook())
@@ -335,6 +378,21 @@ namespace ClosedXML.Report.Tests
                 var value = _lineIndex;
                 _lineIndex++;
                 return string.Format("{{\"Name\":\"N{0}\",\"Age\":{0}}}", value);
+            }
+        }
+
+        private sealed class TrackingStringReader : StringReader
+        {
+            public TrackingStringReader(string value) : base(value)
+            {
+            }
+
+            public bool Disposed { get; private set; }
+
+            protected override void Dispose(bool disposing)
+            {
+                Disposed = true;
+                base.Dispose(disposing);
             }
         }
 

@@ -98,14 +98,11 @@ namespace ClosedXML.Report
             CheckIsDisposed();
             if (value is JsonElement element)
             {
-                AddVariable(element);
-                return;
+                value = JsonVariableParser.ConvertElement(element.Clone());
             }
-
-            if (value is JsonNode node)
+            else if (value is JsonNode node)
             {
-                AddVariable(node);
-                return;
+                value = JsonVariableParser.ConvertNode(node);
             }
 
             if (value is IDictionary dictionary)
@@ -133,33 +130,18 @@ namespace ClosedXML.Report
         public void AddVariable(string alias, object value)
         {
             CheckIsDisposed();
+            if (value is JsonElement element)
+            {
+                value = JsonVariableParser.ConvertElement(element.Clone());
+            }
+            else if (value is JsonNode node)
+            {
+                value = JsonVariableParser.ConvertNode(node);
+            }
+
             if (value is DataTable)
                 value = ((DataTable) value).Rows.Cast<DataRow>();
             _interpreter.AddVariable(alias, value);
-        }
-
-        public void AddVariable(JsonElement value)
-        {
-            CheckIsDisposed();
-            AddVariable(JsonVariableParser.ConvertElement(value.Clone()));
-        }
-
-        public void AddVariable(string alias, JsonElement value)
-        {
-            CheckIsDisposed();
-            AddVariable(alias, JsonVariableParser.ConvertElement(value.Clone()));
-        }
-
-        public void AddVariable(JsonNode value)
-        {
-            CheckIsDisposed();
-            AddVariable(JsonVariableParser.ConvertNode(value));
-        }
-
-        public void AddVariable(string alias, JsonNode value)
-        {
-            CheckIsDisposed();
-            AddVariable(alias, JsonVariableParser.ConvertNode(value));
         }
 
         public void AddJsonVariable(string alias, Stream jsonStream, JsonVariableOptions options = null)
@@ -190,7 +172,18 @@ namespace ClosedXML.Report
                 throw new ArgumentNullException(nameof(jsonReader));
 
             options ??= new JsonVariableOptions();
-            AddVariable(alias, JsonVariableParser.ParseJson(jsonReader, options));
+            object value;
+            try
+            {
+                value = JsonVariableParser.ParseJson(jsonReader, options);
+            }
+            finally
+            {
+                if (!options.LeaveOpen)
+                    jsonReader.Dispose();
+            }
+
+            AddVariable(alias, value);
         }
 
         public void AddJsonLinesVariable(string alias, Stream jsonLinesStream, JsonLinesVariableOptions options = null)
@@ -214,7 +207,7 @@ namespace ClosedXML.Report
                 throw new ArgumentNullException(nameof(jsonLinesReader));
 
             options ??= new JsonLinesVariableOptions();
-            AddVariable(alias, JsonVariableParser.ParseJsonLines(jsonLinesReader, options));
+            AddVariable(alias, JsonVariableParser.ParseJsonLines(jsonLinesReader, options, !options.LeaveOpen));
         }
 
         public void SaveAs(string file)

@@ -13,7 +13,7 @@ namespace ClosedXML.Report
     {
         public static object ParseJson(Stream jsonStream, JsonVariableOptions options)
         {
-            using (var document = JsonDocument.Parse(jsonStream))
+            using (var document = JsonDocument.Parse(jsonStream, GetDocumentOptions(options)))
             {
                 var selected = SelectPath(document.RootElement, options?.RootPath).Clone();
                 return ConvertElement(selected);
@@ -22,8 +22,8 @@ namespace ClosedXML.Report
 
         public static object ParseJson(TextReader jsonReader, JsonVariableOptions options)
         {
-            var reader = CreateReader(jsonReader);
-            using (var document = JsonDocument.ParseValue(ref reader))
+            var data = Encoding.UTF8.GetBytes(jsonReader.ReadToEnd());
+            using (var document = JsonDocument.Parse(data, GetDocumentOptions(options)))
             {
                 var selected = SelectPath(document.RootElement, options?.RootPath).Clone();
                 return ConvertElement(selected);
@@ -46,7 +46,7 @@ namespace ClosedXML.Report
                     JsonDocument doc;
                     try
                     {
-                        doc = JsonDocument.Parse(line);
+                        doc = JsonDocument.Parse(line, GetDocumentOptions(options));
                     }
                     catch (JsonException ex)
                     {
@@ -55,7 +55,7 @@ namespace ClosedXML.Report
 
                     using (doc)
                     {
-                        yield return ConvertElement(doc.RootElement.Clone());
+                        yield return ConvertElement(SelectPath(doc.RootElement, options?.RootPath).Clone());
                     }
                 }
             }
@@ -135,11 +135,14 @@ namespace ClosedXML.Report
             return current;
         }
 
-        private static Utf8JsonReader CreateReader(TextReader jsonReader)
+        private static JsonDocumentOptions GetDocumentOptions(JsonVariableOptions options)
         {
-            var data = jsonReader.ReadToEnd();
-            var utf8 = Encoding.UTF8.GetBytes(data);
-            return new Utf8JsonReader(utf8, true, default);
+            var serializerOptions = options?.SerializerOptions;
+            return new JsonDocumentOptions
+            {
+                AllowTrailingCommas = serializerOptions?.AllowTrailingCommas ?? false,
+                CommentHandling = serializerOptions?.ReadCommentHandling ?? JsonCommentHandling.Disallow
+            };
         }
     }
 }
