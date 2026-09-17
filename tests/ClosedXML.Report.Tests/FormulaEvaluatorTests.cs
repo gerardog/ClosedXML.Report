@@ -1,4 +1,5 @@
 ﻿using ClosedXML.Report.Utils;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Dynamic.Core;
@@ -165,6 +166,22 @@ namespace ClosedXML.Report.Tests
             eval.AddVariable("items", customers);
             eval.Evaluate("{{items.Count(c => c.Id == 9999)}}").Should().Be(1);
             eval.Evaluate("{{items.Select(i => i.Name).Skip(1000).First()}}").Should().Be("Customer1000");
+        }
+
+        [Fact]
+        public void NonGenericEnumerableVariablesKeepRuntimeItemType()
+        {
+            var customers = new ArrayList
+            {
+                new Customer { Id = 1, Name = "Customer1" },
+                new Customer { Id = 2, Name = "Customer2" }
+            };
+
+            var eval = new FormulaEvaluator();
+            eval.AddVariable("items", customers);
+
+            eval.Evaluate("{{items.Count(c => c.Id == 2)}}").Should().Be(1);
+            eval.Evaluate("{{items.Select(i => i.Name).First()}}").Should().Be("Customer1");
         }
 
         class Customer

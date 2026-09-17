@@ -7,6 +7,9 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ClosedXML.Report
 {
@@ -93,6 +96,15 @@ namespace ClosedXML.Report
         public void AddVariable(object value)
         {
             CheckIsDisposed();
+            if (value is JsonElement element)
+            {
+                value = JsonVariableParser.ConvertElement(element.Clone());
+            }
+            else if (value is JsonNode node)
+            {
+                value = JsonVariableParser.ConvertNode(node);
+            }
+
             if (value is IDictionary dictionary)
             {
                 foreach (DictionaryEntry entry in dictionary)
@@ -118,9 +130,84 @@ namespace ClosedXML.Report
         public void AddVariable(string alias, object value)
         {
             CheckIsDisposed();
+            if (value is JsonElement element)
+            {
+                value = JsonVariableParser.ConvertElement(element.Clone());
+            }
+            else if (value is JsonNode node)
+            {
+                value = JsonVariableParser.ConvertNode(node);
+            }
+
             if (value is DataTable)
                 value = ((DataTable) value).Rows.Cast<DataRow>();
             _interpreter.AddVariable(alias, value);
+        }
+
+        public void AddJsonVariable(string alias, Stream jsonStream, JsonVariableOptions options = null)
+        {
+            CheckIsDisposed();
+            if (jsonStream == null)
+                throw new ArgumentNullException(nameof(jsonStream));
+
+            options ??= new JsonVariableOptions();
+            object value;
+            try
+            {
+                value = JsonVariableParser.ParseJson(jsonStream, options);
+            }
+            finally
+            {
+                if (!options.LeaveOpen)
+                    jsonStream.Dispose();
+            }
+
+            AddVariable(alias, value);
+        }
+
+        public void AddJsonVariable(string alias, TextReader jsonReader, JsonVariableOptions options = null)
+        {
+            CheckIsDisposed();
+            if (jsonReader == null)
+                throw new ArgumentNullException(nameof(jsonReader));
+
+            options ??= new JsonVariableOptions();
+            object value;
+            try
+            {
+                value = JsonVariableParser.ParseJson(jsonReader, options);
+            }
+            finally
+            {
+                if (!options.LeaveOpen)
+                    jsonReader.Dispose();
+            }
+
+            AddVariable(alias, value);
+        }
+
+        public void AddJsonLinesVariable(string alias, Stream jsonLinesStream, JsonLinesVariableOptions options = null)
+        {
+            CheckIsDisposed();
+            if (jsonLinesStream == null)
+                throw new ArgumentNullException(nameof(jsonLinesStream));
+
+            options ??= new JsonLinesVariableOptions();
+            var encoding = options.Encoding ?? Encoding.UTF8;
+            var reader = new StreamReader(jsonLinesStream, encoding, true, 1024, options.LeaveOpen);
+            var values = JsonVariableParser.ParseJsonLines(reader, options, true);
+
+            AddVariable(alias, values);
+        }
+
+        public void AddJsonLinesVariable(string alias, TextReader jsonLinesReader, JsonLinesVariableOptions options = null)
+        {
+            CheckIsDisposed();
+            if (jsonLinesReader == null)
+                throw new ArgumentNullException(nameof(jsonLinesReader));
+
+            options ??= new JsonLinesVariableOptions();
+            AddVariable(alias, JsonVariableParser.ParseJsonLines(jsonLinesReader, options, !options.LeaveOpen));
         }
 
         public void SaveAs(string file)
